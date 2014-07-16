@@ -142,26 +142,50 @@ void bmp_draw_lines(BMPFILE *bmp_file)
     bmp_line *aux;
     for(i = 0; i < bmp_file->bmp_index_lines; ++i){
         aux = &bmp_file->bmp_raw_lines[i];
-        if(aux->x0 > aux->x1)
+
+        if(aux->x0 > aux->x1){
             bmp_swap(&aux->x0, &aux->x1);
-        if(aux->y0 > aux->y1)
             bmp_swap(&aux->y0, &aux->y1);
+        }
         dx = aux->x1 - aux->x0;
         dy = aux->y1 - aux->y0;
-
         derror = (dx != 0) ? (float)dy/dx : 1;
+        derror = (derror < 0) ? derror * -1 : derror;
         error = 0;
 
         for(j = 0; j < aux->strength; ++j){
             error = 0;
             y = aux->y0;
             x = aux->x0;
-            for( ; x <= aux->x1 ; ++x){
-                bmp_plot(bmp_file, x+j, y, aux->px);
-                error+= derror;
-                if(error >= 0.5){
-                    y++;
-                    error -= 0.5;
+            if(x == aux->x1){
+                if(aux->y0 < aux->y1){
+                    for( ; y <= aux->y1 ; ++y)
+                        bmp_plot(bmp_file, x+j, y, aux->px);
+                }else{
+                    for( ; y >= aux->y1 ; --y)
+                        bmp_plot(bmp_file, x+j, y, aux->px);
+                }
+            }
+            else{
+                for( ; x <= aux->x1 ; ++x){
+                    if(derror != 0)
+                        error+= derror;
+                    else
+                        if(aux->x0 > aux->x1)
+                            bmp_plot(bmp_file, x-j, y, aux->px);
+                        else
+                            bmp_plot(bmp_file, x+j, y, aux->px);
+                    while(error >= 0.5){
+                        if(aux->x0 > aux->x1)
+                            bmp_plot(bmp_file, x-j, y, aux->px);
+                        else
+                            bmp_plot(bmp_file, x+j, y, aux->px);
+                        if(aux->y0 > aux->y1)
+                            y--;
+                        else
+                            y++;
+                        error -= 1;
+                    }
                 }
             }
         }
@@ -170,12 +194,13 @@ void bmp_draw_lines(BMPFILE *bmp_file)
 // private
 void bmp_draw_dots(BMPFILE *bmp_file)
 {
-    unsigned int i,j,k;
+    unsigned int i;
+    int j,k;
     bmp_dot *aux;
     for(i = 0; i < bmp_file->bmp_index_dots; ++i){
         aux = &bmp_file->bmp_raw_dots[i];
-        for(k = 0; k <=aux->radius*2; ++k )
-            for(j = 0; j <=aux->radius*2; ++j)
+        for(k = -aux->radius; k <=aux->radius; ++k )
+            for(j = -aux->radius; j <=aux->radius; ++j)
                 bmp_plot(bmp_file, aux->x+j, aux->y+k, aux->px);
 
     }
