@@ -6,8 +6,8 @@ int main(void)
 {
     // width, height (pixel)
     bmp_pixel a;
-    a.r = 100;
-    a.g = 100;
+    a.r = 60;
+    a.g = 60;
     a.b = 255;
 
     BMPFILE *file = bmp_init_bmp(512,512,a); // width, height, background-color
@@ -22,6 +22,7 @@ int main(void)
     bmp_add_line(file, 255, 255, 255, 511, 1, a);
     bmp_add_line(file, 255, 255, 127+255, 511, 1, a);
     bmp_add_line(file, 255,255,511, 511, 1, a);
+    bmp_add_line(file, 511, 127+255,255,255,  1, a);
     bmp_add_line(file, 255,255, 511, 127+255, 1, a);
     bmp_add_line(file, 255,255, 511, 255, 1, a);
     bmp_add_line(file, 255,255, 511, 127, 1, a);
@@ -31,9 +32,9 @@ int main(void)
     a.r = 255;
     a.g = 0;
     a.b = 0;
-    bmp_add_dot(file, 200,200,1, a); // bmp_pointer, x, y, radius(px), color
-    bmp_add_dot(file, 100,400,2, a); // bmp_pointer, x, y, radius(px), color
-    bmp_add_dot(file, 100,511,2, a);
+    bmp_add_dot(file, 2,255,2, a); // bmp_pointer, x, y, radius(px), color
+    bmp_add_dot(file, 511,382,1, a); // bmp_pointer, x, y, radius(px), color
+    bmp_add_dot(file, 100,511,1, a);
 
     bmp_generate_bmp(file, "test.bmp");
 

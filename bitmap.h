@@ -168,13 +168,12 @@ void bmp_draw_lines(BMPFILE *bmp_file)
             }
             else{
                 for( ; x <= aux->x1 ; ++x){
-                    if(derror != 0)
-                        error+= derror;
+                    error+= derror;
+                    if(aux->x0 > aux->x1)
+                        bmp_plot(bmp_file, x-j, y, aux->px);
                     else
-                        if(aux->x0 > aux->x1)
-                            bmp_plot(bmp_file, x-j, y, aux->px);
-                        else
-                            bmp_plot(bmp_file, x+j, y, aux->px);
+                        bmp_plot(bmp_file, x+j, y, aux->px);
+
                     while(error >= 0.5){
                         if(aux->x0 > aux->x1)
                             bmp_plot(bmp_file, x-j, y, aux->px);
