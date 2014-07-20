@@ -35,14 +35,14 @@ typedef struct{
 }bmp_pixel;
 
 typedef struct{
-    unsigned int x0,x1,y0,y1;
+    int x0,x1,y0,y1;
     unsigned char strength;
     bmp_pixel px;
 }bmp_line;
 
 typedef struct{
-    unsigned int x,y;
-    unsigned char radius;
+    int x,y;
+    int radius;
     bmp_pixel px;
 }bmp_dot;
 
@@ -79,6 +79,17 @@ typedef struct{
 
 } BMPFILE;
 
+//public
+bmp_pixel bmp_create_pixel(unsigned char r, unsigned char g, unsigned char b)
+{
+    bmp_pixel color;
+    color.r = r;
+    color.g = g;
+    color.b = b;
+
+    return color;
+}
+
 // private
 void bmp_push_line(BMPFILE *bmp_file, bmp_line line)
 {
@@ -87,7 +98,7 @@ void bmp_push_line(BMPFILE *bmp_file, bmp_line line)
 }
 
 //public
-void bmp_add_line(BMPFILE *bmp_file, unsigned int x0, unsigned int y0, unsigned int x1, unsigned int y1, unsigned char strength, bmp_pixel color)
+void bmp_add_line(BMPFILE *bmp_file,  int x0,  int y0,  int x1,  int y1, unsigned char strength, bmp_pixel color)
 {
     bmp_line line;
     line.x0 = x0;
@@ -107,7 +118,7 @@ void bmp_push_dot(BMPFILE *bmp_file, bmp_dot dot)
 }
 
 //public
-void bmp_add_dot(BMPFILE *bmp_file, unsigned int x, unsigned int y, unsigned char radius, bmp_pixel color)
+void bmp_add_dot(BMPFILE *bmp_file, int x,  int y, unsigned char radius, bmp_pixel color)
 {
     bmp_dot dot;
     dot.x = x;
@@ -118,23 +129,23 @@ void bmp_add_dot(BMPFILE *bmp_file, unsigned int x, unsigned int y, unsigned cha
     bmp_push_dot(bmp_file, dot);
 }
 // private
-void bmp_plot(BMPFILE *bmp_file, unsigned int x, unsigned int y, bmp_pixel color)
+void bmp_plot(BMPFILE *bmp_file, int x, int y, bmp_pixel color)
 {
-    if(x < bmp_file->width && y < bmp_file->height)
+    if(x >= 0 && x < bmp_file->width && y < bmp_file->height && y >= 0)
         bmp_file->bmp_raw_data[x + y*bmp_file->width] = color;
 }
 
 //private
-inline void bmp_swap(unsigned int *x, unsigned int *y)
+inline void bmp_swap(int *x, int *y)
 {
-    unsigned int a = *x;
+    int a = *x;
     *x = *y;
     *y = a;
 }
 // private
 void bmp_draw_lines(BMPFILE *bmp_file)
 {
-    unsigned int i,y,x;
+    int i,y,x;
     unsigned char j;
     int dx, dy;
     float error, derror;
@@ -149,7 +160,10 @@ void bmp_draw_lines(BMPFILE *bmp_file)
         }
         dx = aux->x1 - aux->x0;
         dy = aux->y1 - aux->y0;
-        derror = (dx != 0) ? (float)dy/dx : 1;
+        if(dx == 0)
+            derror = 1;
+        else
+            derror = (dx != 0) ? (float)dy/dx : 1;
         derror = (derror < 0) ? derror * -1 : derror;
         error = 0;
 
@@ -266,7 +280,7 @@ BMPFILE *bmp_init_bmp(unsigned int w, unsigned int h, bmp_pixel bgcolor)
     bmp_file->bmp_bytes_dib[0] = 0x28;
     bmp_file->bmp_bytes_dib[1] = 0x00;
     bmp_file->bmp_bytes_dib[2] = 0x00;
-    bmp_file->bmp_bytes_dib[4] = 0x00; // 40 bytes
+    bmp_file->bmp_bytes_dib[3] = 0x00; // 40 bytes
 
     bmp_file->width_bmp[3] = (w >> 24) & 0xff;
     bmp_file->width_bmp[2] = (w >> 16) & 0xff;
@@ -328,12 +342,16 @@ void bmp_generate_bmp(BMPFILE *bmp_file, char *file_name)
 {
     FILE *fp;
     fp = fopen(file_name, "wb");
+    if (fp == NULL)
+        printf("\nBITMAPIMG: Error Open.");
 
-    unsigned int size = bmp_file->width * bmp_file->height;
+    unsigned int size = bmp_file->width * bmp_file->height*3 +54;
+
     bmp_file->bmp_size_raw[3] = (size >> 24) & 0xff;
     bmp_file->bmp_size_raw[2] = (size >> 16) & 0xff;
     bmp_file->bmp_size_raw[1] = (size >> 8) & 0xff;
     bmp_file->bmp_size_raw[0] = size & 0xff;
+
     // BMP
     fwrite(bmp_file->bmp_id_field, sizeof(unsigned char)*2,1, fp);
     fwrite(bmp_file->bmp_size_file, sizeof(unsigned char)*4,1, fp);
@@ -364,18 +382,25 @@ void bmp_generate_bmp(BMPFILE *bmp_file, char *file_name)
     //Raw pixel
     bmp_draw_lines(bmp_file);
     bmp_draw_dots(bmp_file);
-    for(i = 0; i < size ; ++i){
-        fwrite(&bmp_file->bmp_raw_data[i], sizeof(bmp_pixel),1, fp);
-        if(needPadding){
-            pixels++;
-            if(pixels >= pixel_by_line){
-                pixels = 0;
-                for(j = 0; j < time_padding;++j)
-                    fprintf(fp, "%c", bmp_padding);
+    size_t rez;
+
+    if(needPadding){
+        for(i = 0; i < size ; ++i){
+            fwrite(&bmp_file->bmp_raw_data[i], sizeof(bmp_pixel), 1, fp);
+            if(needPadding){
+                pixels++;
+                if(pixels >= pixel_by_line){
+                    pixels = 0;
+                    for(j = 0; j < time_padding;++j)
+                        fprintf(fp, "%c", bmp_padding);
+                }
             }
         }
-
-    }
+    }else
+        fwrite(bmp_file->bmp_raw_data, sizeof(bmp_pixel), bmp_file->width*bmp_file->height-1, fp);
     fclose(fp);
+    free(bmp_file->bmp_raw_data);
+    free(bmp_file->bmp_raw_dots);
+    free(bmp_file->bmp_raw_lines);
 }
 #endif // VBITMAPIMG_H
