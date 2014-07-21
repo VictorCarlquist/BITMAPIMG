@@ -27,6 +27,17 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <float.h>
+
+
+enum {
+    BMP_SCALE_NO,
+    BMP_SCALE_FIT_XY,
+    BMP_SCALE_FIT_X,
+    BMP_SCALE_FIT_Y,
+    BMP_X,
+    BMP_Y
+};
 
 typedef struct{
     unsigned char b;
@@ -35,13 +46,13 @@ typedef struct{
 }bmp_pixel;
 
 typedef struct{
-    int x0,x1,y0,y1;
+    float x0,x1,y0,y1;
     unsigned char strength;
     bmp_pixel px;
 }bmp_line;
 
 typedef struct{
-    int x,y;
+    float x,y;
     int radius;
     bmp_pixel px;
 }bmp_dot;
@@ -77,6 +88,11 @@ typedef struct{
     unsigned int bmp_index_dots;
     bmp_dot *bmp_raw_dots;
 
+    unsigned char scale_type;
+    unsigned char calculated_scale;
+    float dx,dy,minX,minY;
+
+
 } BMPFILE;
 
 //public
@@ -98,7 +114,7 @@ void bmp_push_line(BMPFILE *bmp_file, bmp_line line)
 }
 
 //public
-void bmp_add_line(BMPFILE *bmp_file,  int x0,  int y0,  int x1,  int y1, unsigned char strength, bmp_pixel color)
+void bmp_add_line(BMPFILE *bmp_file,  float x0,  float y0,  float x1,  float y1, unsigned char strength, bmp_pixel color)
 {
     bmp_line line;
     line.x0 = x0;
@@ -118,7 +134,7 @@ void bmp_push_dot(BMPFILE *bmp_file, bmp_dot dot)
 }
 
 //public
-void bmp_add_dot(BMPFILE *bmp_file, int x,  int y, unsigned char radius, bmp_pixel color)
+void bmp_add_dot(BMPFILE *bmp_file, float x,  float y, unsigned char radius, bmp_pixel color)
 {
     bmp_dot dot;
     dot.x = x;
@@ -128,11 +144,103 @@ void bmp_add_dot(BMPFILE *bmp_file, int x,  int y, unsigned char radius, bmp_pix
 
     bmp_push_dot(bmp_file, dot);
 }
+int bmp_calculate_scale(BMPFILE *bmp_file, float c, unsigned char type)
+{
+    if(!bmp_file->calculated_scale && bmp_file->scale_type != BMP_SCALE_NO){
+        unsigned int i;
+        float minX = FLT_MAX, minY = FLT_MAX;
+        float maxX = FLT_MIN, maxY = FLT_MIN;
+        for(i = 0;i < bmp_file->bmp_index_dots; ++i)
+        {
+            if(bmp_file->bmp_raw_dots[i].x > maxX)
+                maxX = bmp_file->bmp_raw_dots[i].x;
+            if(bmp_file->bmp_raw_dots[i].y > maxY)
+                maxY = bmp_file->bmp_raw_dots[i].y;
+
+            if(bmp_file->bmp_raw_dots[i].x < minX)
+                minX = bmp_file->bmp_raw_dots[i].x;
+            if(bmp_file->bmp_raw_dots[i].y < minY)
+                minY = bmp_file->bmp_raw_dots[i].y;
+        }
+        for(i = 0;i < bmp_file->bmp_index_lines; ++i)
+        {
+            if(bmp_file->bmp_raw_lines[i].x0 > maxX)
+                maxX = bmp_file->bmp_raw_lines[i].x0;
+            if(bmp_file->bmp_raw_lines[i].y0 > maxY)
+                maxY = bmp_file->bmp_raw_lines[i].y0;
+            if(bmp_file->bmp_raw_lines[i].x1 > maxX)
+                maxX = bmp_file->bmp_raw_lines[i].x1;
+            if(bmp_file->bmp_raw_lines[i].y1 > maxY)
+                maxY = bmp_file->bmp_raw_lines[i].y1;
+
+            if(bmp_file->bmp_raw_lines[i].x0 < minX)
+                minX = bmp_file->bmp_raw_lines[i].x0;
+            if(bmp_file->bmp_raw_lines[i].y0 < minY)
+                minY = bmp_file->bmp_raw_lines[i].y0;
+            if(bmp_file->bmp_raw_lines[i].x1 < minX)
+                minX = bmp_file->bmp_raw_lines[i].x1;
+            if(bmp_file->bmp_raw_lines[i].y1 < minY)
+                minY = bmp_file->bmp_raw_lines[i].y1;
+        }
+        if(minX >= 0)
+            bmp_file->dx = (bmp_file->width-1)/fabs(fabs(maxX) - fabs(minX));
+        else
+            bmp_file->dx = (bmp_file->width-1)/fabs(fabs(maxX) + fabs(minX));
+        if(minY >=0)
+            bmp_file->dy = (bmp_file->height-1)/fabs(fabs(maxY) - fabs(minY));
+        else
+            bmp_file->dy = (bmp_file->height-1)/fabs(fabs(maxY) + fabs(minY));
+        bmp_file->minX = minX;
+        bmp_file->minY = minY;
+        switch (bmp_file->scale_type) {
+            case BMP_SCALE_FIT_X:
+                bmp_file->dy = bmp_file->dx;
+                break;
+            case BMP_SCALE_FIT_Y:
+                bmp_file->dx = bmp_file->dy;
+                break;
+        }
+        bmp_file->calculated_scale = 1;
+    }
+
+    if(bmp_file->scale_type != BMP_SCALE_NO){
+        if(type == BMP_X){
+            if(bmp_file->minX >= 0)
+                #ifdef __cplusplus
+                    return int(bmp_file->dx*(c-bmp_file->minX));
+                #else
+                    return (int)(bmp_file->dx*(c-bmp_file->minX));
+                #endif
+            else
+                #ifdef __cplusplus
+                    return int(bmp_file->dx*(c+fabs(bmp_file->minX)));
+                #else
+                    return (int)(bmp_file->dx*(c+fabs(bmp_file->minX)));
+                #endif
+        }
+
+        if(type == BMP_Y){
+            if(bmp_file->minY >= 0)
+                #ifdef __cplusplus
+                    return int(bmp_file->dy*(c-bmp_file->minY));
+                #else
+                    return (int)(bmp_file->dy*(c-bmp_file->minY));
+                #endif
+            else
+                #ifdef __cplusplus
+                    return int(bmp_file->dy*(c+fabs(bmp_file->minY)));
+                #else
+                    return (int)(bmp_file->dy*(c+fabs(bmp_file->minY)));
+                #endif
+        }
+    }
+    return 0;
+}
 // private
 void bmp_plot(BMPFILE *bmp_file, int x, int y, bmp_pixel color)
 {
     if(x >= 0 && x < bmp_file->width && y < bmp_file->height && y >= 0)
-        bmp_file->bmp_raw_data[x + y*bmp_file->width] = color;
+        bmp_file->bmp_raw_data[(int)x + ((int)y)*bmp_file->width] = color;
 }
 
 //private
@@ -145,62 +253,36 @@ inline void bmp_swap(int *x, int *y)
 // private
 void bmp_draw_lines(BMPFILE *bmp_file)
 {
-    int i,y,x;
-    unsigned char j;
-    int dx, dy;
-    float error, derror;
+    int i,j;
+    float x0,y0,x1,y1;
+    float l,dx, dy;
 
     bmp_line *aux;
     for(i = 0; i < bmp_file->bmp_index_lines; ++i){
         aux = &bmp_file->bmp_raw_lines[i];
-
-        if(aux->x0 > aux->x1){
-            bmp_swap(&aux->x0, &aux->x1);
-            bmp_swap(&aux->y0, &aux->y1);
+        if(bmp_file->scale_type != BMP_SCALE_NO){
+            x0 = bmp_calculate_scale(bmp_file, aux->x0, BMP_X);
+            y0 = bmp_calculate_scale(bmp_file, aux->y0, BMP_Y);
+            x1 = bmp_calculate_scale(bmp_file, aux->x1, BMP_X);
+            y1 = bmp_calculate_scale(bmp_file, aux->y1, BMP_Y);
+        }else{
+            x0 = aux->x0;
+            y0 = aux->y0;
+            x1 = aux->x1;
+            y1 = aux->y1;
         }
-        dx = aux->x1 - aux->x0;
-        dy = aux->y1 - aux->y0;
-        if(dx == 0)
-            derror = 1;
+        if( abs(x1-x0) >= abs(y1-y0))
+            l = abs(x1-x0);
         else
-            derror = (dx != 0) ? (float)dy/dx : 1;
-        derror = (derror < 0) ? derror * -1 : derror;
-        error = 0;
-
-        for(j = 0; j < aux->strength; ++j){
-            error = 0;
-            y = aux->y0;
-            x = aux->x0;
-            if(x == aux->x1){
-                if(aux->y0 < aux->y1){
-                    for( ; y <= aux->y1 ; ++y)
-                        bmp_plot(bmp_file, x+j, y, aux->px);
-                }else{
-                    for( ; y >= aux->y1 ; --y)
-                        bmp_plot(bmp_file, x+j, y, aux->px);
-                }
-            }
-            else{
-                for( ; x <= aux->x1 ; ++x){
-                    error+= derror;
-                    if(aux->x0 > aux->x1)
-                        bmp_plot(bmp_file, x-j, y, aux->px);
-                    else
-                        bmp_plot(bmp_file, x+j, y, aux->px);
-
-                    while(error >= 0.5){
-                        if(aux->x0 > aux->x1)
-                            bmp_plot(bmp_file, x-j, y, aux->px);
-                        else
-                            bmp_plot(bmp_file, x+j, y, aux->px);
-                        if(aux->y0 > aux->y1)
-                            y--;
-                        else
-                            y++;
-                        error -= 1;
-                    }
-                }
-            }
+            l = abs(y1-y0);
+        dx = (float)(x1-x0) /(float) l;
+        dy = (float)(y1-y0) /(float) l;
+        x0 = x0 + 0.5 * ((dx < 0)? -1 : 1);
+        y0 = y0 + 0.5 * ((dy < 0)? -1 : 1);
+        for (j = 0; j < l; j++) {
+            bmp_plot(bmp_file, floor(x0), floor(y0),aux->px);
+            x0 += dx;
+            y0 += dy;
         }
     }
 }
@@ -208,13 +290,25 @@ void bmp_draw_lines(BMPFILE *bmp_file)
 void bmp_draw_dots(BMPFILE *bmp_file)
 {
     unsigned int i;
-    int j,k;
+    int j,k,x,y;
+
     bmp_dot *aux;
     for(i = 0; i < bmp_file->bmp_index_dots; ++i){
         aux = &bmp_file->bmp_raw_dots[i];
-        for(k = -aux->radius; k <=aux->radius; ++k )
-            for(j = -aux->radius; j <=aux->radius; ++j)
-                bmp_plot(bmp_file, aux->x+j, aux->y+k, aux->px);
+        if(bmp_file->scale_type != BMP_SCALE_NO){
+            x = bmp_calculate_scale(bmp_file, aux->x, BMP_X);
+            y = bmp_calculate_scale(bmp_file, aux->y, BMP_Y);
+        }else{
+            x = aux->x;
+            y = aux->y;
+        }
+        if(aux->radius == 1){
+            bmp_plot(bmp_file, x, y, aux->px);
+            continue;
+        }
+        for(k = -aux->radius-1; k <=aux->radius-1; ++k )
+            for(j = -aux->radius-1; j <=aux->radius-1; ++j)
+                bmp_plot(bmp_file,  x+j, y+k, aux->px);
 
     }
 }
@@ -239,9 +333,12 @@ unsigned int bmp_length(BMPFILE *bmp_file){return bmp_file->bmp_index_raw;}
 
 //public
 // w,h in pixel
-BMPFILE *bmp_init_bmp(unsigned int w, unsigned int h, bmp_pixel bgcolor)
+BMPFILE *bmp_init_bmp(unsigned int w, unsigned int h, bmp_pixel bgcolor, unsigned char type_scale)
 {
     BMPFILE *bmp_file = (BMPFILE*) malloc(sizeof(BMPFILE));
+    bmp_file->scale_type = type_scale;
+    bmp_file->calculated_scale = 0;
+
     bmp_file->width = w;
     bmp_file->height = h;
 
@@ -382,7 +479,6 @@ void bmp_generate_bmp(BMPFILE *bmp_file, char *file_name)
     //Raw pixel
     bmp_draw_lines(bmp_file);
     bmp_draw_dots(bmp_file);
-    size_t rez;
 
     if(needPadding){
         for(i = 0; i < size ; ++i){
