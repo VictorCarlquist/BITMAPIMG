@@ -48,3 +48,5 @@ Save the bitmap image:
 ```
 bmp_generate_bmp(file,"test.bmp");
 ```
+
+See the main.c file as a example.
